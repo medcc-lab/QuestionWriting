@@ -42,7 +42,6 @@ lerna-debug.log*
 
 # MongoDB - ignore dynamic backups but keep demo/seed data
 /backups/*
-!/backups/backup_20250301_214045/
 !/backups/demo-data_20250301_214045/
 
 # Debug
