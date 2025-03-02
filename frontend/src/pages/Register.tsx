@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
   Button,
-  Container,
   Link,
   TextField,
   Typography,
@@ -13,9 +11,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Paper,
+  SelectChangeEvent,
 } from "@mui/material";
 import { register } from "../store/slices/authSlice";
-import { RootState } from "../store";
+import { useAppDispatch, useAppSelector } from "../store";
 import { RegisterData } from "../types/auth";
 
 const Register = () => {
@@ -25,44 +25,64 @@ const Register = () => {
     password: "",
     role: "student",
   });
-
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { isLoading, error } = useSelector((state: RootState) => state.auth);
+  const dispatch = useAppDispatch();
+  const { isLoading, error } = useAppSelector((state) => state.auth);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const resultAction = await dispatch(register(formData));
-    if (register.fulfilled.match(resultAction)) {
+    try {
+      await dispatch(register(formData)).unwrap();
       navigate("/questions");
+    } catch (error) {
+      // Error handling via the auth slice
+      console.error("Registration failed:", error);
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>
-  ) => {
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name!]: value,
+      [name]: value,
+    }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "calc(100vh - 170px)", // Adjust for header and footer
+      }}
+    >
+      <Paper 
+        elevation={3}
+        sx={{ 
+          width: "100%", 
+          maxWidth: 450,
+          p: 4,
+          borderRadius: 2,
         }}
       >
-        <Typography component="h1" variant="h5">
+        <Typography component="h1" variant="h5" align="center" gutterBottom>
           Sign up
         </Typography>
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-          {error && <Alert severity="error">{error}</Alert>}
+        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
           <TextField
             margin="normal"
             required
@@ -73,7 +93,7 @@ const Register = () => {
             autoComplete="name"
             autoFocus
             value={formData.name}
-            onChange={handleChange}
+            onChange={handleTextChange}
           />
           <TextField
             margin="normal"
@@ -84,7 +104,7 @@ const Register = () => {
             name="email"
             autoComplete="email"
             value={formData.email}
-            onChange={handleChange}
+            onChange={handleTextChange}
           />
           <TextField
             margin="normal"
@@ -96,7 +116,7 @@ const Register = () => {
             id="password"
             autoComplete="new-password"
             value={formData.password}
-            onChange={handleChange}
+            onChange={handleTextChange}
           />
           <FormControl fullWidth margin="normal">
             <InputLabel id="role-label">Role</InputLabel>
@@ -106,7 +126,7 @@ const Register = () => {
               name="role"
               value={formData.role}
               label="Role"
-              onChange={handleChange}
+              onChange={handleSelectChange}
             >
               <MenuItem value="student">Student</MenuItem>
               <MenuItem value="faculty">Faculty</MenuItem>
@@ -121,12 +141,14 @@ const Register = () => {
           >
             {isLoading ? "Signing up..." : "Sign Up"}
           </Button>
-          <Link component={RouterLink} to="/login" variant="body2">
-            {"Already have an account? Sign In"}
-          </Link>
+          <Box sx={{ textAlign: "center" }}>
+            <Link component={RouterLink} to="/login" variant="body2">
+              Already have an account? Sign In
+            </Link>
+          </Box>
         </Box>
-      </Box>
-    </Container>
+      </Paper>
+    </Box>
   );
 };
 

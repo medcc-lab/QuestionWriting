@@ -4,11 +4,11 @@ import { useAppDispatch, useAppSelector } from "../store";
 import {
   Box,
   Button,
-  Container,
   Link,
   TextField,
   Typography,
   Alert,
+  Paper,
 } from "@mui/material";
 import { login } from "../store/slices/authSlice";
 import { LoginCredentials } from "../types/auth";
@@ -26,13 +26,9 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login submission started");
     try {
-      console.log("Dispatching login action");
-      const result = await dispatch(login(formData)).unwrap();
-      console.log("Login successful, user data:", result);
+      await dispatch(login(formData)).unwrap();
       setShowLectureSelector(true);
-      console.log("LectureSelector dialog opened");
     } catch (error) {
       // Error handling is already managed by the auth slice reducer
       console.error("Login failed:", error);
@@ -40,7 +36,6 @@ const Login = () => {
   };
 
   const handleLectureSelectorClose = () => {
-    console.log("LectureSelector closing");
     setShowLectureSelector(false);
     navigate("/lectures");
   };
@@ -54,20 +49,32 @@ const Login = () => {
 
   return (
     <>
-      <Container component="main" maxWidth="xs">
-        <Box
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "calc(100vh - 170px)", // Adjust for header and footer
+        }}
+      >
+        <Paper
+          elevation={3}
           sx={{
-            marginTop: 8,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
+            width: "100%",
+            maxWidth: 400,
+            p: 4,
+            borderRadius: 2,
           }}
         >
-          <Typography component="h1" variant="h5">
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
             Sign in
           </Typography>
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
             <TextField
               margin="normal"
               required
@@ -101,13 +108,14 @@ const Login = () => {
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
-            <Link component={RouterLink} to="/register" variant="body2">
-              {"Don't have an account? Sign Up"}
-            </Link>
+            <Box sx={{ textAlign: "center" }}>
+              <Link component={RouterLink} to="/register" variant="body2">
+                Don't have an account? Sign Up
+              </Link>
+            </Box>
           </Box>
-        </Box>
-      </Container>
-
+        </Paper>
+      </Box>
       <LectureSelector
         open={showLectureSelector}
         onClose={handleLectureSelectorClose}
