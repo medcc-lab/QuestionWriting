@@ -2,6 +2,13 @@
 
 This web application is designed to help users create, manage, and organize questions for various purposes such as quizzes, surveys, and educational content. It provides an intuitive interface for writing questions, categorizing them, and exporting them in different formats. For detailed code statistics and metrics, see [STATISTICS.md](STATISTICS.md).
 
+## Documentation
+
+For detailed instructions on how to use the application:
+
+- [Faculty Guide](docs/faculty_guide.md) - Comprehensive guide for instructors
+- [Student Guide](docs/student_guide.md) - Guide for students using the system
+
 ## Prerequisites
 
 Before deploying this application, ensure you have the following installed:
