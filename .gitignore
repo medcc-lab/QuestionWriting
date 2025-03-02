@@ -52,3 +52,6 @@ debug.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# Local files
+NEXT_STEPS.md
