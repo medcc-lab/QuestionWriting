@@ -14,24 +14,55 @@ mkdir -p "$BACKUPS_DIR"
 
 echo "Starting database backup..."
 
-# Get the MongoDB container ID - handles both docker compose v1 and v2
-MONGO_CONTAINER=$(docker compose ps -q mongodb 2>/dev/null || docker-compose ps -q mongodb)
-
-if [ -z "$MONGO_CONTAINER" ]; then
-    echo "Error: MongoDB container is not running"
-    echo "Please start the database first using: ./scripts/start-debug.sh"
+# Check if mongodump is available
+if ! command -v mongodump &> /dev/null; then
+    echo "Error: mongodump command not found"
+    echo "Please install MongoDB Database Tools"
     exit 1
+fi
+
+# Try to detect MongoDB connection settings
+if [ -n "$MONGODB_URI" ]; then
+    # Use explicitly provided URI
+    MONGO_URI="$MONGODB_URI"
+elif [ -n "$MONGODB_HOST" ]; then
+    # Use host if provided
+    MONGO_URI="mongodb://${MONGODB_HOST}:27017/mcq-writing-app"
+else
+    # Default to localhost unless we're in a real container (not devcontainer)
+    if [ -f /.dockerenv ] && [ ! -f /usr/local/share/docker-init.sh ]; then
+        echo "Running inside container (not devcontainer), using container network..."
+        MONGO_URI="mongodb://mongodb:27017/mcq-writing-app"
+    else
+        MONGO_URI="mongodb://localhost:27017/mcq-writing-app"
+    fi
 fi
 
 # Create backup directory
 BACKUP_DIR="$BACKUPS_DIR/$BACKUP_NAME"
 mkdir -p "$BACKUP_DIR"
 
-# Database connection settings
-MONGO_URI="mongodb://localhost:27017/mcq-writing-app"
-
 # Perform backup using mongodump
-mongodump --uri="$MONGO_URI" --out="$BACKUP_DIR"
-
-echo "Backup completed successfully!"
-echo "Backup location: $BACKUP_DIR"
+echo "Using MongoDB URI: $MONGO_URI"
+if mongodump --uri="$MONGO_URI" --out="$BACKUP_DIR" 2>/dev/null; then
+    echo "Backup completed successfully!"
+    echo "Backup location: $BACKUP_DIR"
+    
+    # Create backup info file
+    cat > "$BACKUP_DIR/backup_info.json" << EOF
+{
+    "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+    "name": "$BACKUP_NAME",
+    "type": "$(if [[ $BACKUP_NAME == demo* ]]; then echo "demo"; else echo "regular"; fi)",
+    "uri": "$MONGO_URI"
+}
+EOF
+    
+    # List backup contents
+    echo -e "\nBackup contents:"
+    ls -lh "$BACKUP_DIR"
+else
+    echo "Error: Backup failed"
+    rm -rf "$BACKUP_DIR"
+    exit 1
+fi

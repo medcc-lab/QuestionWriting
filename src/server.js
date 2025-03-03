@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
+const User = require("./models/User");
+const { exec } = require("child_process");
+const path = require("path");
 
 // Route imports
 const userRoutes = require("./routes/userRoutes");
@@ -18,6 +21,45 @@ const app = express();
   try {
     await connectDB();
     console.log("Connected to MongoDB successfully");
+
+    // Check if admin exists and initialize if needed
+    const checkAndInitAdmin = async () => {
+      try {
+        const adminCount = await User.countDocuments({ role: "admin" });
+
+        if (adminCount === 0) {
+          console.log("No admin account found. Initializing admin account...");
+
+          // Get the script path that works in both development and Docker
+          const scriptPath = path.join(
+            __dirname,
+            "..",
+            "scripts",
+            "init-admin.js"
+          );
+          console.log(
+            `Running admin initialization script from: ${scriptPath}`
+          );
+
+          // Run the init-admin.js script with the full path
+          exec(`node ${scriptPath}`, (error, stdout, stderr) => {
+            if (error) {
+              console.error(`Error executing init-admin script: ${error}`);
+              return;
+            }
+            console.log(stdout);
+            if (stderr) console.error(stderr);
+          });
+        } else {
+          console.log("Admin account exists. Skipping initialization.");
+        }
+      } catch (error) {
+        console.error("Error checking for admin account:", error);
+      }
+    };
+
+    // Call the admin check function
+    await checkAndInitAdmin();
   } catch (error) {
     console.error("MongoDB connection error:", error);
     process.exit(1);

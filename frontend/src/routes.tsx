@@ -9,14 +9,18 @@ import QuestionDetail from "./pages/QuestionDetail";
 import ScoringConfig from "./pages/ScoringConfig";
 import LectureList from "./pages/LectureList";
 import LectureEdit from "./pages/LectureEdit";
+import UserManagement from "./pages/UserManagement";
+import ResetPassword from "./pages/ResetPassword";
 
 export const Routes = () => {
   return (
     <RouterRoutes>
+      {/* Public routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* Update root route to show lectures instead of questions */}
+      {/* Private routes */}
       <Route
         path="/"
         element={
@@ -66,6 +70,16 @@ export const Routes = () => {
         element={
           <PrivateRoute>
             <QuestionDetail />
+          </PrivateRoute>
+        }
+      />
+
+      {/* User management routes */}
+      <Route
+        path="/users"
+        element={
+          <PrivateRoute>
+            <UserManagement />
           </PrivateRoute>
         }
       />

@@ -34,6 +34,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LoginIcon from "@mui/icons-material/Login";
 import HowToRegIcon from "@mui/icons-material/HowToReg";
+import PeopleIcon from "@mui/icons-material/People";
 import { RootState, useAppDispatch } from "../store";
 import { logout } from "../store/slices/authSlice";
 
@@ -89,19 +90,25 @@ const Layout = ({ children }: LayoutProps) => {
       text: "All Questions",
       path: "/questions",
       icon: <QuizIcon />,
-      visible: user?.role === "faculty",
+      visible: user?.role === "faculty" || user?.role === "admin",
     },
     {
       text: "Create Question",
       path: getNavigationPath("/questions/create"),
       icon: <AddIcon />,
-      visible: user?.role === "faculty",
+      visible: user?.role === "faculty" || user?.role === "admin",
+    },
+    {
+      text: "User Management",
+      path: "/users",
+      icon: <PeopleIcon />,
+      visible: user?.role === "faculty" || user?.role === "admin",
     },
     {
       text: "Scoring Settings",
       path: "/scoring",
       icon: <SettingsIcon />,
-      visible: user?.role === "faculty",
+      visible: user?.role === "faculty" || user?.role === "admin",
     },
     // Common for logged-in users
     {

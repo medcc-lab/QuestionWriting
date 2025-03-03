@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Question = require("../models/Question");
 
 const protect = async (req, res, next) => {
   try {
@@ -15,6 +16,11 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    // Check if user is active
+    if (!req.user.active) {
+      return res.status(401).json({ message: "Account is not active" });
+    }
+
     next();
   } catch (error) {
     res.status(401).json({ message: "Not authorized" });
@@ -22,10 +28,18 @@ const protect = async (req, res, next) => {
 };
 
 const isFaculty = (req, res, next) => {
-  if (req.user && req.user.role === "faculty") {
+  if (req.user && (req.user.role === "faculty" || req.user.role === "admin")) {
     next();
   } else {
-    res.status(403).json({ message: "Access denied. Faculty only." });
+    res.status(403).json({ message: "Access denied. Faculty or admin only." });
+  }
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === "admin") {
+    next();
+  } else {
+    res.status(403).json({ message: "Access denied. Admin only." });
   }
 };
 
@@ -38,6 +52,7 @@ const isOwnerOrFaculty = async (req, res, next) => {
 
     if (
       req.user.role === "faculty" ||
+      req.user.role === "admin" ||
       question.owner.toString() === req.user._id.toString()
     ) {
       req.question = question;
@@ -45,11 +60,11 @@ const isOwnerOrFaculty = async (req, res, next) => {
     } else {
       res
         .status(403)
-        .json({ message: "Access denied. Owner or faculty only." });
+        .json({ message: "Access denied. Owner, faculty, or admin only." });
     }
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 };
 
-module.exports = { protect, isFaculty, isOwnerOrFaculty };
+module.exports = { protect, isFaculty, isAdmin, isOwnerOrFaculty };

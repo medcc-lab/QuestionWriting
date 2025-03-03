@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-
 import os
 import sys
 import json
 import time
 import random
-import hashlib
 import requests
 import subprocess
 from datetime import datetime, timedelta
-from pprint import pprint
+from typing import Optional, Dict, List, Any
 
 # Configuration
 BASE_URL = "http://localhost:3000/api"
@@ -17,14 +15,6 @@ WORKSPACE_DIR = "/workspaces/QuestionWritingWebApp"
 MONGO_DB = "mcq-writing-app"
 
 # Demo users data
-# Faculty: Professor Smith / Email: smith@example.com / Password: faculty123
-# Faculty: Dr. Johnson / Email: johnson@example.com / Password: faculty123
-# Student: Alice Student / Email: alice@example.com / Password: student123
-# Student: Bob Student / Email: bob@example.com / Password: student123
-# Student: Charlie Student / Email: charlie@example.com / Password: student123
-# Student: Diana Student / Email: diana@example.com / Password: student123
-# Student: Ethan Student / Email: ethan@example.com / Password: student123
-
 FACULTY_USERS = [
     {"name": "Professor Smith", "email": "smith@example.com", "password": "faculty123"},
     {"name": "Dr. Johnson", "email": "johnson@example.com", "password": "faculty123"}
@@ -148,429 +138,373 @@ QUESTION_TEMPLATES = [
     }
 ]
 
-# Helper functions
-def check_server_running():
-    """Check if the API server is running"""
-    try:
-        response = requests.get(f"{BASE_URL}/users/profile", timeout=5)
-        return True
-    except requests.RequestException:
-        return False
+class DemoDataCreator:
+    def __init__(self):
+        self.faculty_tokens = []
+        self.student_tokens = []
+        self.faculty_ids = []
+        self.student_ids = []
+        self.lectures = []
+        self.questions = []
+        self.session = requests.Session()
+        self.admin_token = None
 
-def validate_user_data(user_data):
-    """Validate user data before sending to API"""
-    required_fields = ["name", "email", "password", "role"]
-    allowed_roles = ["student", "faculty"]
-    
-    # Check required fields
-    for field in required_fields:
-        if field not in user_data or not user_data[field]:
-            raise ValueError(f"Missing required field: {field}")
-    
-    # Validate role
-    if user_data["role"] not in allowed_roles:
-        raise ValueError(f"Invalid role. Must be one of: {allowed_roles}")
-    
-    # Basic email validation
-    if "@" not in user_data["email"]:
-        raise ValueError("Invalid email format")
-    
-    return True
+    def check_server_running(self) -> bool:
+        """Check if the API server is running"""
+        try:
+            response = self.session.get(f"{BASE_URL}/users/profile", timeout=5)
+            return True
+        except requests.RequestException:
+            return False
 
-def register_user(user_data):
-    """Register a new user and return the user info with token"""
-    try:
-        # Validate user data
-        validate_user_data(user_data)
-        
-        print(f"Sending registration request for {user_data['email']}...")
-        print(f"Request data: {json.dumps(user_data, indent=2)}")
-        response = requests.post(f"{BASE_URL}/users/register", json=user_data)
-        
-        if not response.ok:
-            print(f"Registration failed with status {response.status_code}")
-            print(f"Response content: {response.text}")
+    def clear_database(self) -> bool:
+        """Clear the database using clear-db.sh"""
+        try:
+            script_path = f"{WORKSPACE_DIR}/scripts/clear-db.sh"
+            subprocess.run([script_path], check=True, capture_output=True, text=True)
+            
+            # Create admin user after clearing the database
+            admin_script_path = f"{WORKSPACE_DIR}/scripts/force-create-admin.js"
+            subprocess.run(["node", admin_script_path], check=True, capture_output=True, text=True)
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error clearing database: {e}")
+            print(f"stdout: {e.stdout}")
+            print(f"stderr: {e.stderr}")
+            return False
+
+    def register_user(self, user_data: Dict[str, str], role: str) -> Optional[Dict[str, Any]]:
+        """Register a new user with error handling"""
+        try:
+            user_data["role"] = role
+            print(f"Registering {user_data['name']}...")
+            
+            response = self.session.post(f"{BASE_URL}/users/register", json=user_data)
+            response.raise_for_status()
+            
+            registered_user = response.json()
+            print(f"Created {role}: {registered_user['name']} (ID: {registered_user['_id']})")
+            
+            user_id = registered_user['_id']
+            
+            # Use admin token to activate the user
+            admin_token = self.admin_token
+            activate_response = self.session.put(
+                f"{BASE_URL}/users/{user_id}/activate",
+                json={"role": role},
+                headers={"Authorization": f"Bearer {admin_token}"}
+            )
+            activate_response.raise_for_status()
+            
+            # Set initial password
+            set_password_response = self.session.post(
+                f"{BASE_URL}/users/set-password",
+                json={"userId": user_id, "password": user_data["password"]}
+            )
+            set_password_response.raise_for_status()
+            
+            # Login to get token again after activation
+            login_response = self.session.post(
+                f"{BASE_URL}/users/login",
+                json={"email": user_data["email"], "password": user_data["password"]}
+            )
+            login_response.raise_for_status()
+            
+            return login_response.json()
+        except requests.RequestException as e:
+            print(f"Error creating user {user_data['email']}: {str(e)}")
+            if hasattr(e, 'response') and e.response:
+                print(f"Response: {e.response.text}")
             return None
-            
-        print(f"Successfully registered {user_data['email']}")
-        return response.json()
-    except ValueError as e:
-        print(f"Validation error for {user_data.get('email', 'unknown')}: {str(e)}")
-        return None
-    except requests.RequestException as e:
-        print(f"Error registering user: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(f"Response content: {e.response.text}")
-        return None
 
-def login_user(email, password):
-    """Log in a user and return the token"""
-    try:
-        response = requests.post(f"{BASE_URL}/users/login", json={"email": email, "password": password})
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error logging in: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def create_lecture(token, lecture_data):
-    """Create a new lecture"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/lectures",
-            json=lecture_data,
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error creating lecture: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def create_question(token, question_data):
-    """Create a new question"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/questions",
-            json=question_data,
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error creating question: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def add_students_to_lecture(token, lecture_id, student_ids):
-    """Add students to a lecture"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/lectures/{lecture_id}/students",
-            json={"studentIds": student_ids},
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error adding students to lecture: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def add_questions_to_lecture(token, lecture_id, question_ids):
-    """Add questions to a lecture"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/lectures/{lecture_id}/questions",
-            json={"questionIds": question_ids},
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error adding questions to lecture: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def submit_edit_suggestion(token, question_id, suggestion_data):
-    """Submit an edit suggestion for a question"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/questions/{question_id}/suggestions",
-            json=suggestion_data,
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error submitting edit suggestion: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def handle_suggestion(token, question_id, suggestion_id, status, comment):
-    """Accept or reject a suggestion"""
-    try:
-        response = requests.put(
-            f"{BASE_URL}/questions/{question_id}/suggestions/{suggestion_id}",
-            json={"status": status, "rebuttalComment": comment},
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error handling suggestion: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def submit_grades(token, question_id, grades_data):
-    """Submit grades for a question"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/questions/{question_id}/grades",
-            json=grades_data,
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error submitting grades: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def finalize_question(token, question_id):
-    """Finalize a question"""
-    try:
-        response = requests.put(
-            f"{BASE_URL}/questions/{question_id}/finalize",
-            json={},
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        print(f"Error finalizing question: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text)
-        return None
-
-def backup_database():
-    """Create a backup of the current database state"""
-    try:
-        script_path = f"{WORKSPACE_DIR}/scripts/backup-db.sh"
-        result = subprocess.run([script_path], check=True, capture_output=True, text=True)
-        print(f"Database backup created: {result.stdout}")
+    def create_users(self) -> bool:
+        """Create faculty and student users"""
+        print("\nCreating faculty users...")
+        for user_data in FACULTY_USERS:
+            if user := self.register_user(user_data, "faculty"):
+                self.faculty_tokens.append(user["token"])
+                self.faculty_ids.append(user["_id"])
         
-        # Find the latest backup
-        backups_dir = f"{WORKSPACE_DIR}/backups"
-        backups = sorted([d for d in os.listdir(backups_dir) if os.path.isdir(os.path.join(backups_dir, d))], reverse=True)
+        if not self.faculty_tokens:
+            print("Error: No faculty accounts were created")
+            return False
         
-        if backups:
-            latest_backup = backups[0]
-            new_name = f"demo-data_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            os.rename(os.path.join(backups_dir, latest_backup), os.path.join(backups_dir, new_name))
-            print(f"Renamed backup to: {new_name}")
-            return new_name
-        else:
-            print("No backup found")
-            return None
+        print("\nCreating student users...")
+        for user_data in STUDENT_USERS:
+            if user := self.register_user(user_data, "student"):
+                self.student_tokens.append(user["token"])
+                self.student_ids.append(user["_id"])
         
-    except subprocess.CalledProcessError as e:
-        print(f"Error creating backup: {e}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
-        return None
+        return bool(self.student_tokens)
 
-def main():
-    """Main function to create demo data"""
-    print("===== Starting Demo Data Creation =====")
-    
-    # Check if server is running
-    if not check_server_running():
-        print("Error: API server is not running. Please start the server with ./scripts/start-debug.sh")
-        sys.exit(1)
-    
-    # Clear the database first
-    print("Clearing database...")
-    try:
-        script_path = f"{WORKSPACE_DIR}/scripts/clear-db.sh"
-        result = subprocess.run([script_path], check=True, capture_output=True, text=True)
-        print("Database cleared successfully")
-    except subprocess.CalledProcessError as e:
-        print(f"Error clearing database: {e}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
-        sys.exit(1)
+    def create_lectures(self) -> bool:
+        """Create demo lectures"""
+        print("\nCreating lectures...")
+        faculty_token = self.faculty_tokens[0]
         
-    # Create faculty users
-    print("\nCreating faculty users...")
-    faculty_tokens = []
-    faculty_ids = []
-    
-    for user_data in FACULTY_USERS:
-        user_data["role"] = "faculty"
-        print(f"Registering {user_data['name']}...")
-        user = register_user(user_data)
-        if user:
-            print(f"Created faculty: {user['name']} (ID: {user['_id']})")
-            faculty_tokens.append(user["token"])
-            faculty_ids.append(user["_id"])
-        else:
-            print(f"Failed to create faculty {user_data['name']}")
-    
-    if not faculty_tokens:
-        print("Error: No faculty accounts were created. Exiting.")
-        sys.exit(1)
-    
-    # Create student users
-    print("\nCreating student users...")
-    student_tokens = []
-    student_ids = []
-    
-    for user_data in STUDENT_USERS:
-        user_data["role"] = "student"
-        print(f"Registering {user_data['name']}...")
-        user = register_user(user_data)
-        if user:
-            print(f"Created student: {user['name']} (ID: {user['_id']})")
-            student_tokens.append(user["token"])
-            student_ids.append(user["_id"])
-        else:
-            print(f"Failed to create student {user_data['name']}")
-    
-    # Create lectures (using first faculty token)
-    print("\nCreating lectures...")
-    faculty_token = faculty_tokens[0]
-    lectures = []
-    
-    for lecture_data in LECTURES:
-        print(f"Creating lecture: {lecture_data['title']}...")
-        lecture = create_lecture(faculty_token, lecture_data)
-        if lecture:
-            print(f"Created lecture: {lecture['title']} (ID: {lecture['_id']})")
-            lectures.append(lecture)
-        else:
-            print(f"Failed to create lecture {lecture_data['title']}")
-    
-    # Add all students to the first lecture
-    if lectures:
-        print(f"\nAdding students to lecture: {lectures[0]['title']}")
-        result = add_students_to_lecture(faculty_token, lectures[0]['_id'], student_ids)
-        if result:
-            print(f"Added {len(student_ids)} students to lecture")
+        for lecture_data in LECTURES:
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/lectures",
+                    json=lecture_data,
+                    headers={"Authorization": f"Bearer {faculty_token}"}
+                )
+                response.raise_for_status()
+                lecture = response.json()
+                print(f"Created lecture: {lecture['title']} (ID: {lecture['_id']})")
+                self.lectures.append(lecture)
+            except requests.RequestException as e:
+                print(f"Error creating lecture {lecture_data['title']}: {str(e)}")
+                if hasattr(e, 'response') and e.response:
+                    print(f"Response: {e.response.text}")
         
-        # Add a subset of students to the other lectures
-        for i, lecture in enumerate(lectures[1:], 1):
-            # Add alternating students to different lectures
-            selected_students = student_ids[i-1::2]
-            print(f"Adding {len(selected_students)} students to lecture: {lecture['title']}")
-            result = add_students_to_lecture(faculty_token, lecture['_id'], selected_students)
-            if result:
-                print(f"Added {len(selected_students)} students to lecture")
-    
-    # Create questions (some by faculty, some by students)
-    print("\nCreating questions...")
-    all_questions = []
-    
-    # Faculty questions
-    num_faculty_questions = min(6, len(QUESTION_TEMPLATES))
-    for i in range(num_faculty_questions):
-        template = QUESTION_TEMPLATES[i]
-        print(f"Faculty creating question: {template['question'][:30]}...")
-        question = create_question(faculty_token, template)
-        if question:
-            print(f"Created question ID: {question['_id']}")
-            all_questions.append(question)
-            
-            # Finalize some questions
-            if i % 2 == 0:
-                print(f"Finalizing question ID: {question['_id']}")
-                finalize_question(faculty_token, question['_id'])
-    
-    # Student questions
-    remaining_templates = QUESTION_TEMPLATES[num_faculty_questions:]
-    for i, template in enumerate(remaining_templates):
-        student_token = student_tokens[i % len(student_tokens)]
-        print(f"Student creating question: {template['question'][:30]}...")
-        question = create_question(student_token, template)
-        if question:
-            print(f"Created question ID: {question['_id']}")
-            all_questions.append(question)
-    
-    # Add questions to lectures
-    if lectures and all_questions:
-        print("\nAdding questions to lectures...")
-        question_ids = [q['_id'] for q in all_questions]
+        return bool(self.lectures)
+
+    def add_students_to_lectures(self) -> bool:
+        """Add students to lectures with different distributions"""
+        if not self.lectures:
+            return False
         
-        # Distribute questions among lectures
-        for i, lecture in enumerate(lectures):
-            # Each lecture gets a subset of questions with some overlap
-            start_idx = i * (len(question_ids) // len(lectures))
-            end_idx = min(start_idx + (len(question_ids) // len(lectures)) + 2, len(question_ids))
-            lecture_questions = question_ids[start_idx:end_idx]
-            
-            print(f"Adding {len(lecture_questions)} questions to lecture: {lecture['title']}")
-            result = add_questions_to_lecture(faculty_token, lecture['_id'], lecture_questions)
-            if result:
-                print(f"Added questions to lecture successfully")
-    
-    # Create some edit suggestions
-    if all_questions:
+        faculty_token = self.faculty_tokens[0]
+        success = True
+        
+        # Add all students to first lecture
+        try:
+            first_lecture = self.lectures[0]
+            response = self.session.post(
+                f"{BASE_URL}/lectures/{first_lecture['_id']}/students",
+                json={"studentIds": self.student_ids},
+                headers={"Authorization": f"Bearer {faculty_token}"}
+            )
+            response.raise_for_status()
+            print(f"Added all students to lecture: {first_lecture['title']}")
+        except requests.RequestException as e:
+            print(f"Error adding students to first lecture: {str(e)}")
+            success = False
+        
+        # Add alternating students to other lectures
+        for i, lecture in enumerate(self.lectures[1:], 1):
+            selected_students = self.student_ids[i-1::2]
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/lectures/{lecture['_id']}/students",
+                    json={"studentIds": selected_students},
+                    headers={"Authorization": f"Bearer {faculty_token}"}
+                )
+                response.raise_for_status()
+                print(f"Added {len(selected_students)} students to lecture: {lecture['title']}")
+            except requests.RequestException as e:
+                print(f"Error adding students to lecture {lecture['title']}: {str(e)}")
+                success = False
+        
+        return success
+
+    def create_questions(self) -> bool:
+        """Create questions from both faculty and students"""
+        print("\nCreating questions...")
+        faculty_token = self.faculty_tokens[0]
+        success = True
+        
+        # Faculty questions
+        num_faculty_questions = min(6, len(QUESTION_TEMPLATES))
+        for i in range(num_faculty_questions):
+            template = QUESTION_TEMPLATES[i]
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/questions",
+                    json=template,
+                    headers={"Authorization": f"Bearer {faculty_token}"}
+                )
+                response.raise_for_status()
+                question = response.json()
+                print(f"Faculty created question ID: {question['_id']}")
+                self.questions.append(question)
+                
+                # Finalize some questions
+                if i % 2 == 0:
+                    finalize_response = self.session.put(
+                        f"{BASE_URL}/questions/{question['_id']}/finalize",
+                        headers={"Authorization": f"Bearer {faculty_token}"}
+                    )
+                    finalize_response.raise_for_status()
+                    print(f"Finalized question ID: {question['_id']}")
+            except requests.RequestException as e:
+                print(f"Error creating faculty question: {str(e)}")
+                success = False
+        
+        # Student questions
+        remaining_templates = QUESTION_TEMPLATES[num_faculty_questions:]
+        for i, template in enumerate(remaining_templates):
+            student_token = self.student_tokens[i % len(self.student_tokens)]
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/questions",
+                    json=template,
+                    headers={"Authorization": f"Bearer {student_token}"}
+                )
+                response.raise_for_status()
+                question = response.json()
+                print(f"Student created question ID: {question['_id']}")
+                self.questions.append(question)
+            except requests.RequestException as e:
+                print(f"Error creating student question: {str(e)}")
+                success = False
+        
+        return success
+
+    def create_suggestions_and_grades(self) -> bool:
+        """Create edit suggestions and grades for questions"""
+        if not self.questions:
+            return False
+        
+        success = True
+        faculty_token = self.faculty_tokens[0]
+        
+        # Create edit suggestions
         print("\nCreating edit suggestions...")
-        for i, question in enumerate(all_questions[:4]):  # Only create suggestions for first few questions
-            student_token = student_tokens[i % len(student_tokens)]
+        for i, question in enumerate(self.questions[:4]):
+            student_token = self.student_tokens[i % len(self.student_tokens)]
             
-            # Create a modified version of the question
-            original_question = question['question']
-            modified_question = f"{original_question} (Improved)"
-            
-            # Create a suggestion with the modified question
             suggestion_data = {
-                "suggestedQuestion": modified_question,
-                "suggestedAnswers": question['answers']  # Keep the same answers
+                "suggestedQuestion": f"{question['question']} (Improved)",
+                "suggestedAnswers": question['answers']
             }
             
-            print(f"Student submitting edit suggestion for question: {original_question[:30]}...")
-            result = submit_edit_suggestion(student_token, question['_id'], suggestion_data)
-            if result and result.get('editSuggestions'):
-                suggestion_id = result['editSuggestions'][-1]['_id']
-                print(f"Created suggestion ID: {suggestion_id}")
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/questions/{question['_id']}/suggestions",
+                    json=suggestion_data,
+                    headers={"Authorization": f"Bearer {student_token}"}
+                )
+                response.raise_for_status()
+                result = response.json()
                 
-                # Faculty handles some suggestions
-                if i % 2 == 0:
-                    status = "accepted" if i % 4 == 0 else "rejected"
-                    comment = "Great improvement!" if status == "accepted" else "Please be more specific with your changes."
-                    print(f"Faculty {status} suggestion for question ID: {question['_id']}")
-                    handle_suggestion(faculty_token, question['_id'], suggestion_id, status, comment)
-    
-    # Submit grades for some questions
-    if all_questions:
+                if suggestion_id := result['editSuggestions'][-1]['_id']:
+                    print(f"Created suggestion ID: {suggestion_id}")
+                    
+                    # Faculty handles some suggestions
+                    if i % 2 == 0:
+                        status = "accepted" if i % 4 == 0 else "rejected"
+                        comment = "Great improvement!" if status == "accepted" else "Please be more specific."
+                        
+                        handle_response = self.session.put(
+                            f"{BASE_URL}/questions/{question['_id']}/suggestions/{suggestion_id}",
+                            json={"status": status, "rebuttalComment": comment},
+                            headers={"Authorization": f"Bearer {faculty_token}"}
+                        )
+                        handle_response.raise_for_status()
+                        print(f"Faculty {status} suggestion for question ID: {question['_id']}")
+            except requests.RequestException as e:
+                print(f"Error with suggestion for question {question['_id']}: {str(e)}")
+                success = False
+        
+        # Submit grades
         print("\nSubmitting grades for questions...")
-        for i, question in enumerate(all_questions[:3]):  # Grade first few questions
-            student_token = student_tokens[i % len(student_tokens)]
+        for i, question in enumerate(self.questions[:3]):
+            student_token = self.student_tokens[i % len(self.student_tokens)]
             
             grades_data = {
                 "questionScore": random.randint(1, 3),
-                "answerGrades": []
+                "answerGrades": [
+                    {"answerId": answer['_id'], "score": random.randint(1, 3)}
+                    for answer in question['answers']
+                ]
             }
             
-            # Grade each answer
-            for j, answer in enumerate(question['answers']):
-                grades_data["answerGrades"].append({
-                    "answerId": answer['_id'],
-                    "score": random.randint(1, 3)
-                })
-            
-            print(f"Student submitting grades for question: {question['question'][:30]}...")
-            result = submit_grades(student_token, question['_id'], grades_data)
-            if result:
+            try:
+                response = self.session.post(
+                    f"{BASE_URL}/questions/{question['_id']}/grades",
+                    json=grades_data,
+                    headers={"Authorization": f"Bearer {student_token}"}
+                )
+                response.raise_for_status()
                 print(f"Submitted grades for question ID: {question['_id']}")
-    
-    # Create database backup
-    print("\nCreating database backup with demo data...")
-    backup_name = backup_database()
-    
-    if backup_name:
-        print(f"\n===== Demo Data Creation Complete =====")
-        print(f"A backup of the demo database has been created: {backup_name}")
-        print(f"You can restore this backup at any time using: ./scripts/restore-db.sh {backup_name}")
+            except requests.RequestException as e:
+                print(f"Error submitting grades for question {question['_id']}: {str(e)}")
+                success = False
+        
+        return success
+
+    def create_backup(self) -> Optional[str]:
+        """Create a backup of the demo data"""
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_name = f"demo-data_{timestamp}"
+            
+            script_path = f"{WORKSPACE_DIR}/scripts/backup-db.sh"
+            result = subprocess.run([script_path, backup_name], check=True, capture_output=True, text=True)
+            print(f"Database backup created: {backup_name}")
+            return backup_name
+        except subprocess.CalledProcessError as e:
+            print(f"Error creating backup: {e}")
+            print(f"stdout: {e.stdout}")
+            print(f"stderr: {e.stderr}")
+            return None
+
+    def print_summary(self, backup_name: Optional[str]):
+        """Print summary of created demo data"""
+        print(f"\n===== Demo Data Creation {'Complete' if backup_name else 'Incomplete'} =====")
+        if backup_name:
+            print(f"A backup of the demo database has been created: {backup_name}")
+            print(f"You can restore this backup at any time using: ./scripts/restore-db.sh {backup_name}")
+        
         print("\nDemo user accounts:")
         print("-------------------")
         for user in FACULTY_USERS:
             print(f"Faculty: {user['name']} / Email: {user['email']} / Password: {user['password']}")
         for user in STUDENT_USERS:
             print(f"Student: {user['name']} / Email: {user['email']} / Password: {user['password']}")
-    else:
-        print("Failed to create database backup")
+
+    def main(self):
+        self.admin_token = None
+        
+        print("===== Starting Demo Data Creation =====")
+        
+        # Check if server is running
+        if not self.check_server_running():
+            print("Error: API server is not running")
+            print("Please start the server with ./scripts/start-debug.sh")
+            sys.exit(1)
+        
+        # Clear the database
+        print("\nClearing database...")
+        if not self.clear_database():
+            print("Error: Failed to clear database")
+            sys.exit(1)
+        
+        # Login as admin to get token
+        admin_login_response = self.session.post(
+            f"{BASE_URL}/users/login",
+            json={"email": "admin@example.com", "password": "adminpassword"}
+        )
+        admin_login_response.raise_for_status()
+        self.admin_token = admin_login_response.json()["token"]
+        
+        # Create users
+        if not self.create_users():
+            print("Error: Failed to create users")
+            sys.exit(1)
+        
+        # Create lectures
+        if not self.create_lectures():
+            print("Error: Failed to create lectures")
+            sys.exit(1)
+        
+        # Add students to lectures
+        self.add_students_to_lectures()
+        
+        # Create questions
+        self.create_questions()
+        
+        # Create suggestions and grades
+        self.create_suggestions_and_grades()
+        
+        # Create backup
+        backup_name = self.create_backup()
+        
+        # Print summary
+        self.print_summary(backup_name)
 
 if __name__ == "__main__":
-    main()
+    creator = DemoDataCreator()
+    creator.main()
