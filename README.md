@@ -2,6 +2,8 @@
 
 This web application is designed to help users create, manage, and organize questions for various purposes such as quizzes, surveys, and educational content. It provides an intuitive interface for writing questions, categorizing them, and exporting them in different formats. For detailed code statistics and metrics, see [STATISTICS.md](STATISTICS.md).
 
+The Question Writing idea to enhance learner's performance is debated for decades; in particular in the field of medical (continuing) education, where MCQ (multiple choice questions) are still paramount in exams, several studies have been performed to measure the performance of students with and without question writing as a learning tool. A [review publication](https://mededpublish.org/articles/13-34) summarizes some studies on the subject. The results are mixed with a slight tendency suggesting a promise in the tool.
+
 ## Documentation
 
 For detailed instructions on how to use the application:
