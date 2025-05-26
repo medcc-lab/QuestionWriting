@@ -1,54 +1,54 @@
 {
-    "name": "Modern Node.js Web App",
-    // Use a more specific Node.js image that includes the vscode user
-    "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:20",
-    "remoteUser": "node",
-    // Ensure proper user setup
-    "updateRemoteUserUID": true,
-    // Features to add to the dev container. More info: https://containers.dev/features.
-    "features": {
-      "ghcr.io/devcontainers/features/docker-in-docker:2": {
-        "version": "latest",
-        "moby": true
-      }
-    },
-    // Configure tool-specific properties.
-    "customizations": {
-      "vscode": {
-        // Add settings for VS Code within the devcontainer.
-        "settings": {
-          "terminal.integrated.defaultProfile.linux": "bash", // Set default terminal to bash
-          "editor.formatOnSave": true, // Enable format on save
-          "editor.defaultFormatter": "esbenp.prettier-vscode", // Set Prettier as default formatter
-          "eslint.validate": [ // Enable ESLint validation for JavaScript and TypeScript
-            "javascript",
-            "javascriptreact",
-            "typescript",
-            "typescriptreact"
-          ],
-          "files.eol": "\n" // Ensure consistent line endings (LF for Linux/macOS)
-        },
-        // Add extensions to be installed when the container starts.
-        "extensions": [
-          "dbaeumer.vscode-eslint",     // ESLint for code linting
-          "esbenp.prettier-vscode",    // Prettier for code formatting
-          "ms-vscode.vscode-node-debugger", // Debugger for Node.js
-          "ms-azuretools.vscode-docker", // Docker extension for container management (optional but useful)
-          "eamodio.gitlens",             // GitLens for enhanced Git integration (optional)
-          "bradlc.vscode-tailwindcss",   // Tailwind CSS IntelliSense (if using Tailwind CSS)
-          "github.copilot"              // VSCode Copilot Integration
-          // Add other extensions as needed for your project (e.g., React, Vue, Angular specific extensions)
-        ]
-      }
-    },
-    // Run scripts after the container is created - useful for setup & dependency installation.
-    "postCreateCommand": "npm install",
-    // Ports to forward to the host machine.
-    "forwardPorts": [3000, 5000, 8080, 8081], // Common ports for web apps and development servers.
-    // Use 'features' to install additional features.
-    // "features": {}, // Add features as needed, e.g., Docker-in-Docker
-    // Mount volumes for specific needs (if necessary).
-    // "mounts": [],
-    // Use 'workspaceFolder' to configure the workspace folder.
-    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
-  }
+  "name": "Question Writing Web App",
+  // Use a more specific Node.js image that includes the vscode user
+  "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:20",
+  "remoteUser": "node",
+  // Ensure proper user setup
+  "updateRemoteUserUID": true,
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true
+    }
+  },
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      // Add settings for VS Code within the devcontainer.
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash", // Set default terminal to bash
+        "editor.formatOnSave": true, // Enable format on save
+        "editor.defaultFormatter": "esbenp.prettier-vscode", // Set Prettier as default formatter
+        "eslint.validate": [
+          // Enable ESLint validation for JavaScript and TypeScript
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "files.eol": "\n" // Ensure consistent line endings (LF for Linux/macOS)
+      },
+      // Add extensions to be installed when the container starts.
+      "extensions": [
+        "dbaeumer.vscode-eslint", // ESLint for code linting
+        "esbenp.prettier-vscode", // Prettier for code formatting
+        "ms-vscode.vscode-node-debugger", // Debugger for Node.js
+        "ms-azuretools.vscode-docker", // Docker extension for container management (optional but useful)
+        "eamodio.gitlens", // GitLens for enhanced Git integration (optional)
+        "bradlc.vscode-tailwindcss", // Tailwind CSS IntelliSense (if using Tailwind CSS)
+        "github.copilot" // VSCode Copilot Integration
+        // Add other extensions as needed for your project (e.g., React, Vue, Angular specific extensions)
+      ]
+    }
+  },
+  // Run scripts after the container is created - useful for setup & dependency installation.
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-requests gnupg curl && curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-6.0.gpg && echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/6.0 main' | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list && sudo apt-get update && sudo apt-get install -y mongodb-mongosh && npm install", // Ports to forward to the host machine.
+  "forwardPorts": [3000, 5000, 8080, 8081], // Common ports for web apps and development servers.
+  // Use 'features' to install additional features.
+  // "features": {}, // Add features as needed, e.g., Docker-in-Docker
+  // Mount volumes for specific needs (if necessary).
+  // "mounts": [],
+  // Use 'workspaceFolder' to configure the workspace folder.
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+}

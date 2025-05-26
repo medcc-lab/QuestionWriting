@@ -11,7 +11,7 @@ from typing import Optional, Dict, List, Any
 
 # Configuration
 BASE_URL = "http://localhost:3000/api"
-WORKSPACE_DIR = "/workspaces/QuestionWritingWebApp"
+WORKSPACE_DIR = "/workspaces/QuestionWriting"
 MONGO_DB = "mcq-writing-app"
 
 # Demo users data
